@@ -2,7 +2,7 @@ import { setup } from "xstate";
 
 export const dogMachine = setup({
   types: {
-    context: {} as {},
+    context: {} as object,
     events: {} as { type: "wakes up" } | { type: "falls asleep" },
   },
 }).createMachine({
