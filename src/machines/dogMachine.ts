@@ -1,4 +1,4 @@
-import { setup, assign } from "xstate";
+import { setup, assign, fromCallback } from "xstate";
 
 export const dogMachine = setup({
   types: {
@@ -6,14 +6,23 @@ export const dogMachine = setup({
     events: {} as
       | { type: "wakes up" }
       | { type: "falls asleep" }
-      | { type: "play" },
+      | { type: "play" }
+      | { type: "tick" },
+  },
+  actors: {
+    energyTicker: fromCallback(({ sendBack }) => {
+      const interval = setInterval(() => {
+        sendBack({ type: "tick" });
+      }, 1000);
+      return () => clearInterval(interval);
+    }),
   },
   actions: {
     reduceEnergy: assign({
       energy: ({ context }) => Math.max(0, context.energy - 10),
     }),
     recoverEnergy: assign({
-      energy: ({ context }) => Math.min(100, context.energy + 5),
+      energy: ({ context }) => Math.min(100, context.energy + 10),
     }),
   },
   guards: {
@@ -27,13 +36,13 @@ export const dogMachine = setup({
   initial: "asleep",
   states: {
     asleep: {
-      after: {
-        1000: {
-          actions: "recoverEnergy",
-          target: "asleep",
-        },
+      invoke: {
+        src: "energyTicker",
       },
       on: {
+        tick: {
+          actions: "recoverEnergy",
+        },
         "wakes up": {
           target: "wakingUp",
         },
