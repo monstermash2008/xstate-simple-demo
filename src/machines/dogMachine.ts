@@ -1,15 +1,20 @@
-import { setup, assign, fromCallback } from "xstate";
+import { setup, assign, fromCallback, type ActorRef } from "xstate";
+import { toyMachine } from "./toyMachine";
 
 export const dogMachine = setup({
   types: {
-    context: {} as { energy: number },
+    context: {} as {
+      energy: number;
+      toyRef?: ActorRef<any, any>;
+    },
     events: {} as
       | { type: "wakes up" }
       | { type: "falls asleep" }
       | { type: "play" }
       | { type: "tick" }
       | { type: "shout" }
-      | { type: "pet" },
+      | { type: "pet" }
+      | { type: "toy.broken" },
   },
   actors: {
     energyTicker: fromCallback(({ sendBack }) => {
@@ -18,6 +23,7 @@ export const dogMachine = setup({
       }, 1000);
       return () => clearInterval(interval);
     }),
+    toy: toyMachine,
   },
   actions: {
     reduceEnergy: assign({
@@ -26,9 +32,21 @@ export const dogMachine = setup({
     recoverEnergy: assign({
       energy: ({ context }) => Math.min(100, context.energy + 10),
     }),
+    spawnToy: assign({
+      toyRef: ({ spawn }) => spawn("toy", { id: "my-toy" }),
+    }),
+    chewToy: ({ context }) => {
+      if (context.toyRef) {
+        context.toyRef.send({ type: "CHEW" });
+      }
+    },
+    clearToy: assign({
+      toyRef: undefined,
+    }),
   },
   guards: {
     hasEnergy: ({ context }) => context.energy >= 10,
+    hasToy: ({ context }) => !!context.toyRef,
   },
 }).createMachine({
   context: {
@@ -65,10 +83,17 @@ export const dogMachine = setup({
         },
         awake: {
           on: {
-            play: {
-              guard: "hasEnergy",
-              actions: "reduceEnergy",
-            },
+            play: [
+              {
+                guard: ({ context }) =>
+                  context.energy >= 10 && !!context.toyRef, // Has energy AND toy
+                actions: ["reduceEnergy", "chewToy"],
+              },
+              {
+                guard: "hasEnergy", // Has energy but NO toy
+                actions: ["reduceEnergy", "spawnToy"],
+              },
+            ],
             "falls asleep": {
               target: "asleep",
             },
@@ -80,6 +105,12 @@ export const dogMachine = setup({
     },
     mood: {
       initial: "happy",
+      on: {
+        "toy.broken": {
+          actions: "clearToy",
+          target: ".grumpy",
+        },
+      },
       states: {
         happy: {
           on: {
@@ -89,7 +120,11 @@ export const dogMachine = setup({
         grumpy: {
           on: {
             pet: { target: "happy" },
-            play: { target: "happy" },
+            // If playing creates a NEW toy, it makes dog happy.
+            play: {
+              guard: ({ context }) => !context.toyRef, // Only if getting a new toy
+              target: "happy"
+            },
           },
         },
       },

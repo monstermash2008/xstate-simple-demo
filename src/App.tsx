@@ -1,7 +1,30 @@
+import { useSelector } from "@xstate/react";
 import { useDogMachine } from "./contexts/Dog/useDogMachine";
 import asleepSvg from "./assets/asleep.svg";
 import walkingSvg from "./assets/walking.svg";
 import grumpyPng from "./assets/grumpy_dog.png";
+
+// Helper component to render the toy
+const Toy = ({ toyRef }: { toyRef: any }) => {
+  const toySnapshot = useSelector(toyRef, (state: any) => state);
+
+  if (!toySnapshot) return null;
+
+  const isBroken = toySnapshot.matches("broken");
+  const durability = toySnapshot.context.durability;
+
+  return (
+    <div className="absolute top-4 right-4 flex flex-col items-end">
+      <div className="text-4xl">{isBroken ? "🕸️" : "🎾"}</div>
+      <div className="text-xs font-bold text-gray-500 mt-1">
+        HP: {durability}/3
+      </div>
+      {isBroken && (
+        <span className="text-red-500 text-xs font-bold">BROKEN!</span>
+      )}
+    </div>
+  );
+};
 
 function App() {
   // Now using the context instead of useMachine
@@ -15,7 +38,12 @@ function App() {
         </h1>
 
         {/* Dog visual representation */}
-        <div className="flex flex-col items-center gap-4 border p-8 rounded-lg shadow-lg">
+        <div className="flex flex-col items-center gap-4 border p-8 rounded-lg shadow-lg relative min-w-[300px]">
+          {/* Toy Display */}
+          {currentState.context.toyRef && (
+            <Toy toyRef={currentState.context.toyRef} />
+          )}
+
           {currentState.matches({ activity: "asleep" }) && (
             <img src={asleepSvg} alt="Sleeping dog" className="w-32 h-32" />
           )}
@@ -103,11 +131,7 @@ function App() {
 
         <div className="mt-4 text-gray-600 flex flex-col items-center">
           <div>
-            Activity:{" "}
-            <strong>{JSON.stringify(currentState.value.activity)}</strong>
-          </div>
-          <div>
-            Mood: <strong>{JSON.stringify(currentState.value.mood)}</strong>
+            Status: <strong>{JSON.stringify(currentState.value)}</strong>
           </div>
         </div>
       </div>
