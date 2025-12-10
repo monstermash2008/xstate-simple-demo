@@ -7,7 +7,9 @@ export const dogMachine = setup({
       | { type: "wakes up" }
       | { type: "falls asleep" }
       | { type: "play" }
-      | { type: "tick" },
+      | { type: "tick" }
+      | { type: "shout" }
+      | { type: "pet" },
   },
   actors: {
     energyTicker: fromCallback(({ sendBack }) => {
@@ -33,43 +35,64 @@ export const dogMachine = setup({
     energy: 100,
   },
   id: "dog",
-  initial: "asleep",
+  type: "parallel",
   states: {
-    asleep: {
-      invoke: {
-        src: "energyTicker",
-      },
-      on: {
-        tick: {
-          actions: "recoverEnergy",
+    activity: {
+      initial: "asleep",
+      states: {
+        asleep: {
+          invoke: {
+            src: "energyTicker",
+          },
+          on: {
+            tick: {
+              actions: "recoverEnergy",
+            },
+            "wakes up": {
+              target: "wakingUp",
+            },
+          },
+          description:
+            "![sleeping puppy](https://raw.githubusercontent.com/statelyai/assets/main/example-images/dogs/asleep.svg)",
         },
-        "wakes up": {
-          target: "wakingUp",
+        wakingUp: {
+          after: {
+            3000: {
+              target: "awake",
+            },
+          },
+          description: "Puppy is waking up...",
+        },
+        awake: {
+          on: {
+            play: {
+              guard: "hasEnergy",
+              actions: "reduceEnergy",
+            },
+            "falls asleep": {
+              target: "asleep",
+            },
+          },
+          description:
+            "![happy awake puppy](https://raw.githubusercontent.com/statelyai/assets/main/example-images/dogs/walking.svg)",
         },
       },
-      description:
-        "![sleeping puppy](https://raw.githubusercontent.com/statelyai/assets/main/example-images/dogs/asleep.svg)",
     },
-    wakingUp: {
-      after: {
-        3000: {
-          target: "awake",
+    mood: {
+      initial: "happy",
+      states: {
+        happy: {
+          on: {
+            shout: { target: "grumpy" },
+          },
+        },
+        grumpy: {
+          on: {
+            pet: { target: "happy" },
+            play: { target: "happy" },
+          },
         },
       },
-      description: "Puppy is waking up...",
-    },
-    awake: {
-      on: {
-        play: {
-          guard: "hasEnergy",
-          actions: "reduceEnergy",
-        },
-        "falls asleep": {
-          target: "asleep",
-        },
-      },
-      description:
-        "![happy awake puppy](https://raw.githubusercontent.com/statelyai/assets/main/example-images/dogs/walking.svg)",
     },
   },
 });
