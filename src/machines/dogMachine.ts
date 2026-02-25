@@ -36,9 +36,7 @@ export const dogMachine = setup({
       toyRef: ({ spawn }) => spawn("toy", { id: "my-toy" }),
     }),
     chewToy: ({ context }) => {
-      if (context.toyRef) {
-        context.toyRef.send({ type: "CHEW" });
-      }
+      context.toyRef?.send({ type: "CHEW" });
     },
     clearToy: assign({
       toyRef: undefined,
@@ -46,7 +44,6 @@ export const dogMachine = setup({
   },
   guards: {
     hasEnergy: ({ context }) => context.energy >= 10,
-    hasToy: ({ context }) => !!context.toyRef,
   },
 }).createMachine({
   context: {
