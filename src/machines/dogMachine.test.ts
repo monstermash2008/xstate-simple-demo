@@ -1,6 +1,14 @@
-import { createActor, waitFor } from "xstate";
+import { createActor, fromPromise, waitFor } from "xstate";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { dogMachine } from "./dogMachine";
+import { dogMachine, FETCH_TOY_DELAY_MS } from "./dogMachine";
+
+const instantFetchDogMachine = dogMachine.provide({
+  actors: {
+    fetchToy: fromPromise<{ ok: boolean }>(async () => {
+      return { ok: true };
+    }),
+  },
+});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -8,7 +16,7 @@ afterEach(() => {
 
 describe("dogMachine", () => {
   it("starts asleep, happy, and at full energy", () => {
-    const actor = createActor(dogMachine).start();
+    const actor = createActor(instantFetchDogMachine).start();
 
     const snapshot = actor.getSnapshot();
     expect(snapshot.matches({ activity: "asleep" })).toBe(true);
@@ -20,7 +28,7 @@ describe("dogMachine", () => {
 
   it("moves from wakingUp to awake after 3 seconds", async () => {
     vi.useFakeTimers();
-    const actor = createActor(dogMachine).start();
+    const actor = createActor(instantFetchDogMachine).start();
 
     actor.send({ type: "wakes up" });
     expect(actor.getSnapshot().matches({ activity: "wakingUp" })).toBe(true);
@@ -33,13 +41,18 @@ describe("dogMachine", () => {
 
   it("recovers energy while asleep and caps at 100", async () => {
     vi.useFakeTimers();
-    const actor = createActor(dogMachine).start();
+    const actor = createActor(instantFetchDogMachine).start();
 
     actor.send({ type: "wakes up" });
     vi.advanceTimersByTime(3000);
     await waitFor(actor, (snapshot) => snapshot.matches({ activity: "awake" }));
 
     actor.send({ type: "play" });
+    await waitFor(
+      actor,
+      (snapshot) =>
+        snapshot.matches({ activity: "awake" }) && snapshot.context.toyRef !== undefined,
+    );
     actor.send({ type: "play" });
     expect(actor.getSnapshot().context.energy).toBe(80);
 
@@ -57,13 +70,18 @@ describe("dogMachine", () => {
 
   it("spawns a toy on first play and chews it on later play", async () => {
     vi.useFakeTimers();
-    const actor = createActor(dogMachine).start();
+    const actor = createActor(instantFetchDogMachine).start();
 
     actor.send({ type: "wakes up" });
     vi.advanceTimersByTime(3000);
     await waitFor(actor, (snapshot) => snapshot.matches({ activity: "awake" }));
 
     actor.send({ type: "play" });
+    await waitFor(
+      actor,
+      (snapshot) =>
+        snapshot.matches({ activity: "awake" }) && snapshot.context.toyRef !== undefined,
+    );
     const firstPlaySnapshot = actor.getSnapshot();
     expect(firstPlaySnapshot.context.energy).toBe(90);
     expect(firstPlaySnapshot.context.toyRef).toBeDefined();
@@ -84,13 +102,18 @@ describe("dogMachine", () => {
 
   it("clears toy and becomes grumpy when the toy breaks", async () => {
     vi.useFakeTimers();
-    const actor = createActor(dogMachine).start();
+    const actor = createActor(instantFetchDogMachine).start();
 
     actor.send({ type: "wakes up" });
     vi.advanceTimersByTime(3000);
     await waitFor(actor, (snapshot) => snapshot.matches({ activity: "awake" }));
 
     actor.send({ type: "play" });
+    await waitFor(
+      actor,
+      (snapshot) =>
+        snapshot.matches({ activity: "awake" }) && snapshot.context.toyRef !== undefined,
+    );
     actor.send({ type: "play" });
     actor.send({ type: "play" });
     actor.send({ type: "play" });
@@ -106,7 +129,7 @@ describe("dogMachine", () => {
 
   it("returns to happy when grumpy dog gets a new toy via play", async () => {
     vi.useFakeTimers();
-    const actor = createActor(dogMachine).start();
+    const actor = createActor(instantFetchDogMachine).start();
 
     actor.send({ type: "wakes up" });
     vi.advanceTimersByTime(3000);
@@ -116,6 +139,12 @@ describe("dogMachine", () => {
     expect(actor.getSnapshot().matches({ mood: "grumpy" })).toBe(true);
 
     actor.send({ type: "play" });
+
+    await waitFor(
+      actor,
+      (snapshot) =>
+        snapshot.matches({ activity: "awake" }) && snapshot.context.toyRef !== undefined,
+    );
 
     const snapshot = actor.getSnapshot();
     expect(snapshot.matches({ mood: "happy" })).toBe(true);
@@ -127,7 +156,7 @@ describe("dogMachine", () => {
 
   it("does not spend energy or spawn toy when too tired to play", async () => {
     vi.useFakeTimers();
-    const actor = createActor(dogMachine).start();
+    const actor = createActor(instantFetchDogMachine).start();
 
     actor.send({ type: "wakes up" });
     vi.advanceTimersByTime(3000);
@@ -135,6 +164,7 @@ describe("dogMachine", () => {
 
     for (let i = 0; i < 10; i++) {
       actor.send({ type: "play" });
+      await waitFor(actor, (snapshot) => snapshot.matches({ activity: "awake" }));
     }
 
     const exhausted = actor.getSnapshot();
@@ -149,6 +179,94 @@ describe("dogMachine", () => {
     expect(afterExtraPlay.context.toyRef).toBe(toyRefAtExhaustion);
     expect(afterExtraPlay.context.toyRef?.getSnapshot().context.durability).toBe(
       durabilityAtExhaustion,
+    );
+
+    actor.stop();
+  });
+
+  it("enters fetchingToy while requesting a toy and returns to awake when done", async () => {
+    vi.useFakeTimers();
+
+    const machine = dogMachine.provide({
+      actors: {
+        fetchToy: fromPromise<{ ok: boolean }>(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          return { ok: true };
+        }),
+      },
+    });
+
+    const actor = createActor(machine).start();
+
+    actor.send({ type: "wakes up" });
+    vi.advanceTimersByTime(3000);
+    await waitFor(actor, (snapshot) => snapshot.matches({ activity: "awake" }));
+
+    actor.send({ type: "play" });
+
+    expect(actor.getSnapshot().matches({ activity: "fetchingToy" })).toBe(true);
+
+    vi.advanceTimersByTime(500);
+    await waitFor(
+      actor,
+      (snapshot) =>
+        snapshot.matches({ activity: "awake" }) && snapshot.context.toyRef !== undefined,
+    );
+
+    actor.stop();
+  });
+
+  it("keeps fetchingToy active long enough to be clearly visible", async () => {
+    vi.useFakeTimers();
+
+    const actor = createActor(dogMachine).start();
+
+    actor.send({ type: "wakes up" });
+    vi.advanceTimersByTime(3000);
+    await waitFor(actor, (snapshot) => snapshot.matches({ activity: "awake" }));
+
+    actor.send({ type: "play" });
+    expect(actor.getSnapshot().matches({ activity: "fetchingToy" })).toBe(true);
+
+    vi.advanceTimersByTime(1200);
+    expect(actor.getSnapshot().matches({ activity: "fetchingToy" })).toBe(true);
+
+    const remainingDelay = Math.max(0, FETCH_TOY_DELAY_MS - 1200) + 500;
+    vi.advanceTimersByTime(remainingDelay);
+    await waitFor(
+      actor,
+      (snapshot) =>
+        snapshot.matches({ activity: "awake" }) && snapshot.context.toyRef !== undefined,
+    );
+
+    actor.stop();
+  });
+
+  it("becomes grumpy if toy fetch fails", async () => {
+    vi.useFakeTimers();
+
+    const machine = dogMachine.provide({
+      actors: {
+        fetchToy: fromPromise<{ ok: boolean }>(async () => {
+          throw new Error("network fail");
+        }),
+      },
+    });
+
+    const actor = createActor(machine).start();
+
+    actor.send({ type: "wakes up" });
+    vi.advanceTimersByTime(3000);
+    await waitFor(actor, (snapshot) => snapshot.matches({ activity: "awake" }));
+
+    actor.send({ type: "play" });
+
+    await waitFor(
+      actor,
+      (snapshot) =>
+        snapshot.matches({ activity: "awake" }) &&
+        snapshot.matches({ mood: "grumpy" }) &&
+        snapshot.context.toyRef === undefined,
     );
 
     actor.stop();

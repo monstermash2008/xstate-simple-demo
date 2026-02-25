@@ -1,5 +1,14 @@
-import { setup, assign, fromCallback, type ActorRefFrom } from "xstate";
+import {
+  setup,
+  assign,
+  fromCallback,
+  fromPromise,
+  raise,
+  type ActorRefFrom,
+} from "xstate";
 import { toyMachine } from "./toyMachine";
+
+export const FETCH_TOY_DELAY_MS = 1800;
 
 export const dogMachine = setup({
   types: {
@@ -14,7 +23,8 @@ export const dogMachine = setup({
       | { type: "tick" }
       | { type: "shout" }
       | { type: "pet" }
-      | { type: "toy.broken" },
+      | { type: "toy.broken" }
+      | { type: "toy.fetchFailed" },
   },
   actors: {
     energyTicker: fromCallback(({ sendBack }) => {
@@ -24,6 +34,11 @@ export const dogMachine = setup({
       return () => clearInterval(interval);
     }),
     toy: toyMachine,
+    fetchToy: fromPromise(async () => {
+      // Mocking an API request (or other async process) before a toy becomes available.
+      await new Promise((resolve) => setTimeout(resolve, FETCH_TOY_DELAY_MS));
+      return { ok: true };
+    }),
   },
   actions: {
     reduceEnergy: assign({
@@ -41,6 +56,7 @@ export const dogMachine = setup({
     clearToy: assign({
       toyRef: undefined,
     }),
+    markToyFetchFailed: raise({ type: "toy.fetchFailed" }),
   },
   guards: {
     hasEnergy: ({ context }) => context.energy >= 10,
@@ -83,12 +99,13 @@ export const dogMachine = setup({
             play: [
               {
                 guard: ({ context }) =>
-                  context.energy >= 10 && !!context.toyRef, // Has energy AND toy
+                  context.energy >= 10 && !!context.toyRef,
                 actions: ["reduceEnergy", "chewToy"],
               },
               {
-                guard: "hasEnergy", // Has energy but NO toy
-                actions: ["reduceEnergy", "spawnToy"],
+                guard: ({ context }) => context.energy >= 10 && !context.toyRef,
+                target: "fetchingToy",
+                actions: "reduceEnergy",
               },
             ],
             "falls asleep": {
@@ -98,6 +115,19 @@ export const dogMachine = setup({
           description:
             "![happy awake puppy](https://raw.githubusercontent.com/statelyai/assets/main/example-images/dogs/walking.svg)",
         },
+        fetchingToy: {
+          invoke: {
+            src: "fetchToy",
+            onDone: {
+              target: "awake",
+              actions: "spawnToy",
+            },
+            onError: {
+              target: "awake",
+              actions: "markToyFetchFailed",
+            },
+          },
+        },
       },
     },
     mood: {
@@ -105,6 +135,9 @@ export const dogMachine = setup({
       on: {
         "toy.broken": {
           actions: "clearToy",
+          target: ".grumpy",
+        },
+        "toy.fetchFailed": {
           target: ".grumpy",
         },
       },
@@ -119,8 +152,8 @@ export const dogMachine = setup({
             pet: { target: "happy" },
             // If playing creates a NEW toy, it makes dog happy.
             play: {
-              guard: ({ context }) => !context.toyRef, // Only if getting a new toy
-              target: "happy"
+              guard: ({ context }) => !context.toyRef,
+              target: "happy",
             },
           },
         },

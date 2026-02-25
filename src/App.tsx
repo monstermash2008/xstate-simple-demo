@@ -9,6 +9,38 @@ import { toyMachine } from "./machines/toyMachine";
 // Helper component to render the toy
 type ToyActorRef = ActorRefFrom<typeof toyMachine>;
 
+const BallIcon = ({ className = "" }: { className?: string }) => (
+  <svg
+    viewBox="0 0 64 64"
+    className={className}
+    role="img"
+    aria-label="Tennis ball"
+  >
+    <defs>
+      <radialGradient id="ballGradient" cx="30%" cy="28%" r="70%">
+        <stop offset="0%" stopColor="#bef264" />
+        <stop offset="65%" stopColor="#84cc16" />
+        <stop offset="100%" stopColor="#65a30d" />
+      </radialGradient>
+    </defs>
+    <circle cx="32" cy="32" r="30" fill="url(#ballGradient)" />
+    <path
+      d="M20 4c-8 7-12 17-12 28s4 21 12 28"
+      fill="none"
+      stroke="#f8fafc"
+      strokeWidth="4"
+      strokeLinecap="round"
+    />
+    <path
+      d="M44 4c8 7 12 17 12 28s-4 21-12 28"
+      fill="none"
+      stroke="#f8fafc"
+      strokeWidth="4"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
 const Toy = ({ toyRef }: { toyRef: ToyActorRef }) => {
   const toySnapshot = useSelector(toyRef, (state) => state);
 
@@ -18,8 +50,14 @@ const Toy = ({ toyRef }: { toyRef: ToyActorRef }) => {
   const durability = toySnapshot.context.durability;
 
   return (
-    <div className="absolute top-4 right-4 flex flex-col items-end">
-      <div className="text-4xl">{isBroken ? "🕸️" : "🎾"}</div>
+    <div className="flex flex-col items-end">
+      <div className="h-10 w-10">
+        {isBroken ? (
+          <span className="text-4xl">🕸️</span>
+        ) : (
+          <BallIcon className="h-10 w-10 drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]" />
+        )}
+      </div>
       <div className="text-xs font-bold text-gray-500 mt-1">
         HP: {durability}/3
       </div>
@@ -33,6 +71,10 @@ const Toy = ({ toyRef }: { toyRef: ToyActorRef }) => {
 function App() {
   // Now using the context instead of useMachine
   const { currentState, send } = useDogMachine();
+  const isFetchingToy = currentState.matches({ activity: "fetchingToy" });
+  const showAwakeDog =
+    currentState.matches({ activity: "awake" }) ||
+    currentState.matches({ activity: "fetchingToy" });
 
   return (
     <>
@@ -44,14 +86,21 @@ function App() {
         {/* Dog visual representation */}
         <div className="flex flex-col items-center gap-4 border p-8 rounded-lg shadow-lg relative min-w-75">
           {/* Toy Display */}
-          {currentState.context.toyRef && (
-            <Toy toyRef={currentState.context.toyRef} />
-          )}
+          <div className="absolute top-4 right-4 flex min-h-14 min-w-12 flex-col items-end">
+            {isFetchingToy ? (
+              <>
+                <BallIcon className="h-10 w-10 animate-pulse will-change-transform [animation-duration:850ms]" />
+                <span className="mt-1 text-xs font-bold text-gray-500">Fetching toy...</span>
+              </>
+            ) : currentState.context.toyRef ? (
+              <Toy toyRef={currentState.context.toyRef} />
+            ) : null}
+          </div>
 
           {currentState.matches({ activity: "asleep" }) && (
             <img src={asleepSvg} alt="Sleeping dog" className="w-32 h-32" />
           )}
-          {currentState.matches({ activity: "awake" }) && (
+          {showAwakeDog && (
             <>
               {currentState.matches({ mood: "happy" }) && (
                 <img src={walkingSvg} alt="Happy dog" className="w-32 h-32" />
