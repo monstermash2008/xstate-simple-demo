@@ -1,12 +1,16 @@
 import { useSelector } from "@xstate/react";
+import type { ActorRefFrom } from "xstate";
 import { useDogMachine } from "./contexts/Dog/useDogMachine";
 import asleepSvg from "./assets/asleep.svg";
 import walkingSvg from "./assets/walking.svg";
 import grumpyPng from "./assets/grumpy_dog.png";
+import { toyMachine } from "./machines/toyMachine";
 
 // Helper component to render the toy
-const Toy = ({ toyRef }: { toyRef: any }) => {
-  const toySnapshot = useSelector(toyRef, (state: any) => state);
+type ToyActorRef = ActorRefFrom<typeof toyMachine>;
+
+const Toy = ({ toyRef }: { toyRef: ToyActorRef }) => {
+  const toySnapshot = useSelector(toyRef, (state) => state);
 
   if (!toySnapshot) return null;
 
@@ -38,7 +42,7 @@ function App() {
         </h1>
 
         {/* Dog visual representation */}
-        <div className="flex flex-col items-center gap-4 border p-8 rounded-lg shadow-lg relative min-w-[300px]">
+        <div className="flex flex-col items-center gap-4 border p-8 rounded-lg shadow-lg relative min-w-75">
           {/* Toy Display */}
           {currentState.context.toyRef && (
             <Toy toyRef={currentState.context.toyRef} />

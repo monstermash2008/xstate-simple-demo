@@ -13,12 +13,12 @@ type DogMachineProviderProps = {
 
 export function DogMachineProvider({ children }: DogMachineProviderProps) {
   // Use the machine with inspection
-  const machineState = useMachine(dogMachine, {
+  const [currentState, send] = useMachine(dogMachine, {
     inspect: inspector.inspect,
   });
 
   return (
-    <DogMachineContext.Provider value={machineState}>
+    <DogMachineContext.Provider value={[currentState, send]}>
       {children}
     </DogMachineContext.Provider>
   );

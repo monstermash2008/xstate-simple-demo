@@ -1,11 +1,11 @@
-import { setup, assign, fromCallback, type ActorRef } from "xstate";
+import { setup, assign, fromCallback, type ActorRefFrom } from "xstate";
 import { toyMachine } from "./toyMachine";
 
 export const dogMachine = setup({
   types: {
     context: {} as {
       energy: number;
-      toyRef?: ActorRef<any, any>;
+      toyRef?: ActorRefFrom<typeof toyMachine>;
     },
     events: {} as
       | { type: "wakes up" }
